@@ -5,7 +5,7 @@ use strict;
 use vars qw($VERSION);
 sub debug (@) { print @_ if $Mail::Thread::debug }
 
-$VERSION = '1.2';
+$VERSION = '1.4';
 
 sub new {
     my $self = shift;
@@ -16,20 +16,27 @@ sub new {
     }, $self;
 }
 
+sub _get_hdr {
+    my ($class, $msg, $hdr) = @_;
+    $msg->head->get($hdr);
+}
+
 sub _references {
     my $class = shift;
     my $msg = shift;
-    my @references = ($msg->head->get("References") =~ /<([^>]+)>/g);
-    my $foo = $msg->head->get("In-Reply-To");
+    my @references = ($class->_get_hdr($msg, "References") =~ /<([^>]+)>/g);
+    my $foo = $class->_get_hdr($msg,"In-Reply-To");
     $foo =~ s/^<([^>]+)>.*/$1/;
-    push @references, $foo if $foo and $references[-1] ne $foo;
+    push @references, $foo if $foo =~ /\S+\@\S+/ and $references[-1] ne $foo;
     return (@references);
 }
 
 sub _msgid {
     my ($class, $msg) = @_;
-    return $msg->isa("Mail::Message") ? $msg->messageId :
-           $msg->head->get("Message-ID");
+    my $id= $msg->isa("Mail::Message") ? $msg->messageId :
+            $class->_get_hdr($msg, "Message-ID");
+    $id =~ s/^<([^>]+)>.*/$1/; # We expect this not to have <>s
+    return $id;
 }
 
 sub rootset { @{$_[0]{rootset}} }
@@ -41,7 +48,7 @@ sub _dump {
         print ", child ".eval{$_->child}." and sibling ".eval{$_->next};
         print "\n";
         for my $tag (qw(parent child next)) {
-            die "I am my own tag!" if (eval "\$_->$tag") == $_;
+            die "I am my own $tag!" if (eval "\$_->$tag") == $_;
         }
     }
 }
@@ -54,7 +61,10 @@ sub thread {
     $self->{rootset} = [ map {_prune_empties($_, 0)} @{$self->{rootset}} ]
         unless $Mail::Thread::noprune;
     #$self->_group_set_bysubject();
+    $self->_finish();
 }
+
+sub _finish {}
 
 sub _get_cont_for_id {
     my $self = shift;
@@ -66,13 +76,15 @@ sub _get_cont_for_id {
         debug "  Found an existing container for $id, ", $cont->subject,"\n";
     } else {
         debug "  Creating something new to hold $id\n";
-        $cont= Mail::Thread::Container->new();
+        $cont= $self->_container_class->new($id);
         $self->{id_table}{$id} = $cont;
     }
     $cont->messageid($id);
     return $cont;
 
 }
+
+sub _container_class { "Mail::Thread::Container" }
 
 sub _setup {
     my $self = shift;
@@ -107,9 +119,12 @@ sub _setup {
             $parent_ref = $msg_cont;
         }
         debug " Done threading references\n\n";
-
         if ($c->parent) {
-            debug "Unlinking this from the old parent\n";
+            if ($c->parent->messageid eq $refs[-1]) {
+                debug "Parent was already correctly specified\n";
+                next;
+            }
+            debug "Unlinking this from the old parent". ($c->parent)."\n";
             my ($rest, $prev);
             $rest = $c->parent->child;
             while ($rest) {
@@ -121,12 +136,12 @@ sub _setup {
                 unless $rest;
 
             if (!$prev) { 
-                $c->parent->child($c->next); 
+                $c->parent->child(defined ($c->next) ? $c->next : 0);
             }
             else { $prev->next($c->next) }
 
-            $c->next(0);
-            $c->parent(0);
+            $c->next(undef);
+            $c->parent(undef);
         }
 
         if (@refs) { 
@@ -135,6 +150,7 @@ sub _setup {
             my $daddy = $self->_get_cont_for_id($refs[-1]);
             $c->parent($daddy);
             my $rest = $daddy->child;
+            die "This link already exists!" if $rest == $c;
             if (!$rest) {
                 debug "  OK, setting parent of ".$c->messageid." to ".$daddy->messageid."\n";
                 $daddy->child($c);
@@ -142,11 +158,13 @@ sub _setup {
                 debug "  $daddy (".$daddy->messageid. ") already has children\n";
                 # But one of them may be me! (but shouldn't be)
                 my %seen = ();
-                while ($rest->next) {
+                print "Beginning of the rest chain: $rest\n";
+                while ($rest->can("next") and $rest->next) {
+                    print " Rest is $rest", (ref $rest), "\n";
                     die "Loop in ->next chain!" if $seen{$rest}++;
                     die "Huh?" if $rest == $c;
                     die "Double huh!" if $rest == $rest->next;
-                    $rest = $rest->next ;
+                    $rest = $rest->next;
                 }
                 debug "  Adding $c onto ".$rest->next;
                 $rest->next($c);
@@ -168,7 +186,9 @@ sub _prune_empties {
     
     debug " "x$level;
     debug "Looking at ".$cont->messageid."\n";
+    
     if (!$cont->message and !$cont->child) {
+        debug "Done with $cont\n";
         return ();
     }
     if (!$cont->message and $cont->child) {
@@ -182,15 +202,14 @@ sub _prune_empties {
         debug " "x$level;
         debug "Vising next\n";
         $cont->next(_prune_empties($cont->next, $level+1));
-        $cont->next(0) unless $cont->next;
+        $cont->next(undef) unless $cont->next;
     }
     if ($cont->child) { 
         debug " "x$level;
         debug "Vising children\n";
         $cont->child(_prune_empties($cont->child, $level+1));
-        $cont->child(0) unless $cont->child;
+        $cont->child(undef) unless $cont->child;
     }
-    debug "Returning $cont\n" if $cont->message;
     return $cont if $cont->message;
     debug "Pruning this node\n";
     return ();
@@ -200,11 +219,11 @@ package Mail::Thread::Container;
 
 sub new { my $self = shift; bless { @_ }, $self; }
 
-sub message { $_[0]->{message} = $_[1] if defined $_[1]; $_[0]->{message} }
-sub child   { $_[0]->{child}   = $_[1] if defined $_[1]; $_[0]->{child}   }
-sub parent  { $_[0]->{parent}  = $_[1] if defined $_[1]; $_[0]->{parent}  }
-sub next    { $_[0]->{next}    = $_[1] if defined $_[1]; $_[0]->{next}    }
-sub messageid { $_[0]->{id}      = $_[1] if defined $_[1]; $_[0]->{id}      }
+sub message { $_[0]->{message} = $_[1] if @_ == 2; $_[0]->{message} }
+sub child   { $_[0]->{child}   = $_[1] if @_ == 2; $_[0]->{child}   }
+sub parent  { $_[0]->{parent}  = $_[1] if @_ == 2; $_[0]->{parent}  }
+sub next    { $_[0]->{next}    = $_[1] if @_ == 2; $_[0]->{next}    }
+sub messageid { $_[0]->{id}      = $_[1] if @_ == 2; $_[0]->{id}      }
 sub subject { eval { $_[0]->message->head->get("Subject") } }
 
 
@@ -236,9 +255,9 @@ sub recurse_down {
         $seen{$self}++;
         $callback->($self);
 
-        if ($seen{$self->next}) { $self->next(0) }
+        if ($seen{$self->next}) { $self->next(undef) }
         $do_it_all->($self->next, $callback)  if $self->next;
-        if ($seen{$self->child}) { $self->child(0) }
+        if ($seen{$self->child}) { $self->child(undef) }
         $do_it_all->($self->child, $callback) if $self->child;
 
     };

@@ -3,20 +3,28 @@ BEGIN { eval "use Mail::Box::Manager;";
         "You don't have Mail::Box::Manager"); exit; }
 }
 
-use Test::More tests => 3;
+use Test::More tests => 9;
 use_ok("Mail::Thread");
 my $mgr = new Mail::Box::Manager;
 my $box = $mgr->open(folder => "t/testbox-2");
 
 my $threader = new Mail::Thread($box->messages);
 
+my @stuff;
+for (0..3) { # This tests that multiple applications of the algorithm work OK.
+    @stuff = ();
 $threader->thread;
 
 is($threader->rootset, 1, "We have one main threads");
 
-my @stuff;
-for ($threader->rootset) {
-    dump_em($_, 0);
+for ($threader->rootset) { dump_em($_, 0); }
+
+is_deeply(\@stuff,
+ [
+          [ 0, "sort numbers", '20030101210258.63148.qmail@web20805.mail.yahoo.com' ],
+          [ 1, "Re: sort numbers", 'auvpjq$ede$1@post.home.lunix' ],
+          [ 1, "Re: sort numbers", 'r3i71vcul4g95orb58173qj6b8dus6pnch@4ax.com' ]
+        ]);
 }
 
 sub dump_em {
@@ -27,10 +35,3 @@ sub dump_em {
     dump_em($self->next, $level) if $self->next;
     dump_em($self->child, $level+1) if $self->child;
 }
-
-is_deeply(\@stuff,
- [
-          [ 0, "sort numbers", '20030101210258.63148.qmail@web20805.mail.yahoo.com' ],
-          [ 1, "Re: sort numbers", 'auvpjq$ede$1@post.home.lunix' ],
-          [ 1, "Re: sort numbers", 'r3i71vcul4g95orb58173qj6b8dus6pnch@4ax.com' ]
-        ]);
