@@ -5,7 +5,7 @@ use strict;
 use vars qw($VERSION $debug $noprune $nosubject);
 sub debug (@) { print @_ if $debug }
 
-$VERSION = '2.3';
+$VERSION = '2.4';
 
 sub new {
     my $self = shift;
@@ -314,7 +314,17 @@ sub child   { $_[0]->{child}   = $_[1] if @_ == 2; $_[0]->{child}   }
 sub parent  { $_[0]->{parent}  = $_[1] if @_ == 2; $_[0]->{parent}  }
 sub next    { $_[0]->{next}    = $_[1] if @_ == 2; $_[0]->{next}    }
 sub messageid { $_[0]->{id}      = $_[1] if @_ == 2; $_[0]->{id}      }
-sub subject { eval { my $s = $_[0]->message->head->get("Subject") ||''; chomp $s; $s } }
+sub subject { $_[0]->header("Subject") }
+sub header {
+    my $self   = shift;
+    my $header = shift;
+    eval {
+        my $s = $_[0]->message->head->get( $header ) || '';
+        chomp $s;
+        $s;
+    }
+}
+
 
 sub topmost {
     my $self = shift;
@@ -567,6 +577,10 @@ Returns the message held in this container, if we have one.
 Returns the message ID for this container. This will be around whether we
 have the message or not, since some other message will have referred to it
 by message ID.
+
+=head2 header( $name )
+
+returns the named header of the contained message
 
 =head2 subject
 

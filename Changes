@@ -1,5 +1,8 @@
 Revision history for Perl extension Mail::Thread.
 
+2.4   Wednesday 10th December, 2003
+      New instance method.  Mail::Thread::Container->header( $name )
+
 2.3   Wednesday 7th May, 2003
      - Container->topmost now scans depth first.  Incidentally makes t/1.t work correctly
        under both 5.8 and 5.6
