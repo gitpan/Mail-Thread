@@ -6,7 +6,7 @@ use vars qw($VERSION $debug $noprune $nosubject);
 sub debug (@) { print @_ if $debug }
 use Email::Abstract;
 
-$VERSION = '2.41';
+$VERSION = '2.5';
 
 sub new {
     my $self = shift;
