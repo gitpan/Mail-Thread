@@ -4,6 +4,7 @@ use 5.00503;
 use strict;
 use vars qw($VERSION $debug $noprune $nosubject);
 sub debug (@) { print @_ if $debug }
+use Email::Abstract;
 
 $VERSION = '2.41';
 
@@ -18,7 +19,7 @@ sub new {
 
 sub _get_hdr {
     my ($class, $msg, $hdr) = @_;
-    $msg->head->get($hdr) || '';
+    Email::Abstract->get_header($msg, $hdr) || '';
 }
 
 sub _uniq {
@@ -315,7 +316,7 @@ sub parent  { $_[0]->{parent}  = $_[1] if @_ == 2; $_[0]->{parent}  }
 sub next    { $_[0]->{next}    = $_[1] if @_ == 2; $_[0]->{next}    }
 sub messageid { $_[0]->{id}      = $_[1] if @_ == 2; $_[0]->{id}      }
 sub subject { $_[0]->header("subject") }
-sub header { eval { my $s = $_[0]->message->head->get( $_[1] ) || ''; chomp $s; $s; } }
+sub header { $_[0]->message and eval { my $s = Email::Abstract->get_header($_[0]->message, $_[1] ) || ''; chomp $s; $s; } }
 
 
 sub topmost {
@@ -517,8 +518,9 @@ This module implements something relatively close to Jamie Zawinski's mail
 threading algorithm, as described by http://www.jwz.org/doc/threading.html.
 Any deviations from the algorithm are accidental.
 
-It's happy to be handed C<Mail::Internet> and C<Mail::Box::Message> objects,
-since they're more or less the same, but nothing other than that.
+It's happy to be handed any mail object supported by C<Email::Abstract>.
+If you need to do anything else, you'll have to subclass and override
+C<_get_hdr>.
 
 =head1 METHODS
 
@@ -631,11 +633,12 @@ Calls the given callback on this node and B<all> of its children.
 
 =head1 AUTHOR
 
-Simon Cozens, E<lt>simon@kasei.comE<gt>
+Simon Cozens, E<lt>simon@cpan.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
 Copyright 2003 by Kasei
+Copyright 2004 by Simon Cozens
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

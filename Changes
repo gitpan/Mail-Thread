@@ -1,5 +1,9 @@
 Revision history for Perl extension Mail::Thread.
 
+2.5   Thu May 27 13:47:02 BST 2004
+    - Use Email::Abstract to avoid requiring particular mail
+      representations.
+    - This change obsoletes Email::Thread, incidentally.
 
 2.41  Wednesday 10th December, 2003
       Bugfix of 2.4 (bad programmer, no cookie!)

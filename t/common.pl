@@ -8,6 +8,8 @@ BEGIN { eval "use Mail::Internet;";
     eval "use Test::Differences";
 }
 
+package Email::Abstract::Mail;
+use base 'Email::Abstract::MailInternet';
 # keep a sequence number so we can order things later
 package Mail;
 use base 'Mail::Internet';
