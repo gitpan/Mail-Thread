@@ -1,5 +1,10 @@
 Revision history for Perl extension Mail::Thread.
 
+2.0   Tue Mar 25 15:36:10 GMT 2003
+    - Major update
+    - Inheritability
+    - Fixes to the algorithm based on the Python implementation.
+
 1.1   Wed Jan 15 12:01:28 GMT 2003
     - Tweaks to the algorithm
     - More tests
