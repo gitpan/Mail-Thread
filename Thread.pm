@@ -5,7 +5,7 @@ use strict;
 use vars qw($VERSION $debug $noprune $nosubject);
 sub debug (@) { print @_ if $debug }
 
-$VERSION = '2.4';
+$VERSION = '2.41';
 
 sub new {
     my $self = shift;
@@ -314,16 +314,8 @@ sub child   { $_[0]->{child}   = $_[1] if @_ == 2; $_[0]->{child}   }
 sub parent  { $_[0]->{parent}  = $_[1] if @_ == 2; $_[0]->{parent}  }
 sub next    { $_[0]->{next}    = $_[1] if @_ == 2; $_[0]->{next}    }
 sub messageid { $_[0]->{id}      = $_[1] if @_ == 2; $_[0]->{id}      }
-sub subject { $_[0]->header("Subject") }
-sub header {
-    my $self   = shift;
-    my $header = shift;
-    eval {
-        my $s = $_[0]->message->head->get( $header ) || '';
-        chomp $s;
-        $s;
-    }
-}
+sub subject { $_[0]->header("subject") }
+sub header { eval { my $s = $_[0]->message->head->get( $_[1] ) || ''; chomp $s; $s; } }
 
 
 sub topmost {

@@ -1,5 +1,9 @@
 Revision history for Perl extension Mail::Thread.
 
+
+2.41  Wednesday 10th December, 2003
+      Bugfix of 2.4 (bad programmer, no cookie!)
+
 2.4   Wednesday 10th December, 2003
       New instance method.  Mail::Thread::Container->header( $name )
 

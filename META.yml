@@ -1,7 +1,7 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         Mail-Thread
-version:      2.4
+version:      2.41
 version_from: Thread.pm
 installdirs:  site
 requires:
