@@ -3,8 +3,9 @@ package Mail::Thread;
 use 5.00503;
 use strict;
 use vars qw($VERSION);
+sub debug (@) { print @_ if $Mail::Thread::debug }
 
-$VERSION = '1.0';
+$VERSION = '1.1';
 
 sub new {
     my $self = shift;
@@ -20,7 +21,8 @@ sub _references {
     my @references = ($msg->head->get("References") =~ /<([^>]+)>/g);
     my $foo = $msg->head->get("In-Reply-To");
     $foo =~ s/^<([^>]+)>.*/$1/;
-    return (@references, $foo || ());
+    push @references, $foo if $foo and $references[-1] ne $foo;
+    return (@references);
 }
 
 sub _msgid {
@@ -29,16 +31,31 @@ sub _msgid {
            $msg->head->get("Message-ID");
 }
 
-sub _subject { $_[0]->{message}->head->get("Subject") }
+sub _subject { eval { $_[0]->{message}->head->get("Subject") } }
 
 sub rootset { @{$_[0]{rootset}} }
+
+sub _dump {
+    for (@_) {
+        print "\n$_ (";
+        print $_->{id}.") ["._subject($_)."] has father ".eval{$_->{parent}};
+        print ", child ".eval{$_->{child}}." and sibling ".eval{$_->{next}};
+        print "\n";
+        for my $tag (qw(parent child next)) {
+            die "I am my own tag!" if $_->{$tag} == $_;
+            die "I don't have a decent next: $_->{$tag}!" if $_->{$tag} and 
+                ref($_->{$tag}) !~ /Container/;
+        }
+    }
+}
 
 sub thread {
     my $self = shift;
     $self->_setup();
     $self->{rootset} = [ grep { !$_->{parent} } values %{$self->{id_table}} ];
     delete $self->{id_table};
-    $self->{rootset} = [ map {_prune_empties($_)} @{$self->{rootset}} ];
+    $self->{rootset} = [ map {_prune_empties($_, 0)} @{$self->{rootset}} ]
+        unless $Mail::Thread::noprune;
     #$self->_group_set_by_subject();
 }
 
@@ -46,12 +63,12 @@ sub _get_cont_for_id {
     my $self = shift;
     my $id = shift;
     my $cont;
-    #print "Looking for a container for $id\n";
+    debug "Looking for a container for $id\n";
     if (exists($self->{id_table}{$id})) {
         $cont = $self->{id_table}{$id};
-        #print "  Found an existing container for $id, ", _subject($cont),"\n";
+        debug "  Found an existing container for $id, ", _subject($cont),"\n";
     } else {
-        #print "  Creating something new to hold $id\n";
+        debug "  Creating something new to hold $id\n";
         $cont= Mail::Thread::Container->new();
         $self->{id_table}{$id} = $cont;
     }
@@ -64,32 +81,38 @@ sub _setup {
     my $self = shift;
 
     for my $message (@{$self->{messages}}) {
+        debug "\n\nLooking at "._msgid($message)."\n";
         my $c = $self->_get_cont_for_id(_msgid($message));
         $c->{message} = $message;
-        #print "\n\nLooking at "._subject($c)," ("._msgid($message).")\n";
+        debug "  ["._subject($c)."]\n----\n";
         my $parent_ref = undef;
         my @refs = _references($message);
-        #print " Threading references: \n" if @refs;
+        debug " Now looking at its references: @refs\n";
         for my $ref (@refs) {
             my $msg_cont = $self->_get_cont_for_id($ref);
-            #print "   I AM $msg_cont\n";
+            debug "   Looking at reference $ref\n";
+
             if ($parent_ref ne undef &&
-                not exists $msg_cont->{parent} &&
+                (not exists $msg_cont->{parent}) &&
                 $parent_ref != $msg_cont->{parent} &&
                 !$msg_cont->find_child($parent_ref)) {
-                    #print "   Threading!\n";
+                    debug "   Threading:\n";
                     $msg_cont->{parent} = $parent_ref;
-                    #print "$msg_cont has a parent of $parent_ref\n";
-                    $msg_cont->{next} = $parent_ref->{child}
-                        unless $parent_ref->{child} == $msg_cont;
-                    #print "$msg_cont has a next of ".$msg_cont->{next}."\n";
+                    if ($parent_ref->{child}) {
+                        $msg_cont->{next} = $parent_ref->{child};
+                    }
                     $parent_ref->{child} = $msg_cont;
-                    #print "$parent_ref has a child of $msg_cont\n";
+                     
+                    if ($Mail::Thread::debug) { _dump( values %{$self->{id_table}} ); }
+
+            } else {
             }
             $parent_ref = $msg_cont;
         }
+        debug " Done threading references\n\n";
+
         if ($c->{parent}) {
-            #print "Linking $c onto the end of ",$c->{parent},"\n";
+            debug "Unlinking this from the old parent\n";
             my ($rest, $prev);
             $rest = $c->{parent}->{child};
             while ($rest) {
@@ -100,48 +123,79 @@ sub _setup {
             die "Didn't find $c in ".$c->{parent} 
                 unless $rest;
 
-            if (!$prev) { $c->{parent}{child} = $c->{next}; }
+            if (!$prev) { 
+                $c->{parent}{child} = $c->{next}; 
+            }
             else { $prev->{next} = $c->{next} }
 
             delete $c->{next};
             delete $c->{parent};
         }
-        if (!$c->{parent} and @refs) { 
+
+        if (@refs) { 
+            if ($Mail::Thread::debug) { _dump( values %{$self->{id_table}} ); }
+            debug " Forcing the addition of a parent\n";
             my $daddy = $self->_get_cont_for_id($refs[-1]);
             $c->{parent} = $daddy;
-            my $rest = $c->{parent}->{child};
+            my $rest = $daddy->{child};
             if (!$rest) {
+                debug "  OK, setting parent of ".$c->{id}." to ".$daddy->{id}."\n";
                 $daddy->{child} = $c;
             } else {
-                #print "$daddy already has children\n";
-                $rest = $rest->{next} while $rest->{next};
-                #print "Adding $c onto $rest->{next}";
+                debug "  $daddy (".$daddy->{id}. ") already has children\n";
+                # But one of them may be me! (but shouldn't be)
+                my %seen = ();
+                while ($rest->{next}) {
+                    die "Loop in ->next chain!" if $seen{$rest}++;
+                    die "Huh?" if $rest == $c;
+                    die "Double huh!" if $rest == $rest->{next};
+                    $rest = $rest->{next} ;
+                }
+                debug "  Adding $c onto $rest->{next}";
                 $rest->{next} = $c;
            }
+            if ($Mail::Thread::debug) { _dump( values %{$self->{id_table}} ); }
+           
        }
+       debug "Done with this message!\n----\n";
+        if ($Mail::Thread::debug) {
+            _dump( values %{$self->{id_table}} );
+        }
     }
 }
 
 
-my %seen;
-
 sub _prune_empties {
     my $cont = shift;
-    return () if $seen{$cont}++;
+    my $level = shift;
     
-    if ($cont->{next}) { 
-        $cont->{next} = _prune_empties($cont->{next});
-        delete $cont->{next} unless $cont->{next};
-   }
-    if ($cont->{child}) { 
-        $cont->{child} = _prune_empties($cont->{child});
-        delete $cont->{child} unless $cont->{child};
-   }
+    debug " "x$level;
+    debug "Looking at $cont->{id}\n";
+    if (!$cont->{message} and !$cont->{child}) {
+        return ();
+    }
+    if (!$cont->{message} and $cont->{child}) {
+        debug " "x$level;
+        debug "No message: children are - ".join " ", map {$_->{id}} $cont->children;
+        debug "\n";
+        return map { _prune_empties($_, $level+1) } $cont->children;
+    }
 
-    return $cont->{child} if !$cont->{message} and $cont->{child}
-                            and !$cont->{child}->{next};
-    return $cont
-            unless !$cont->{message} and !$cont->{child};
+    if ($cont->{next}) {
+        debug " "x$level;
+        debug "Vising next\n";
+        $cont->{next} = _prune_empties($cont->{next}, $level+1);
+        delete $cont->{next} unless $cont->{next};
+    }
+    if ($cont->{child}) { 
+        debug " "x$level;
+        debug "Vising children\n";
+        $cont->{child} = _prune_empties($cont->{child}, $level+1);
+        delete $cont->{child} unless $cont->{child};
+    }
+    debug "Returning $cont\n" if $cont->{message};
+    return $cont if $cont->{message};
+    debug "Pruning this node\n";
     return ();
 }   
 
@@ -170,7 +224,7 @@ sub children {
     my $self = shift;
     my @children;
     my $visitor = $self->{child};
-    while ($visitor) { push @children, $visitor; $visitor = $visitor->{child};}
+    while ($visitor) { push @children, $visitor; $visitor = $visitor->{next};}
     return @children;
 }
 
@@ -211,14 +265,14 @@ Mail::Thread - Perl implementation of JWZ's mail threading algorithm
 
     sub dump_em {
         my ($self, $level) = @_;
-        print (' \\-> ' x $level);
+        debug (' \\-> ' x $level);
         if ($self->message) {
             print $self->message->head->get("Subject") , "\n";
         } else {
             print "[ Message $self not available ]\n";
         }
-        dump_em($self->next, $level) if $self->next;
         dump_em($self->child, $level+1) if $self->child;
+        dump_em($self->next, $level) if $self->next;
     }
 
 =head1 DESCRIPTION

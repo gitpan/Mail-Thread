@@ -1,5 +1,10 @@
 Revision history for Perl extension Mail::Thread.
 
+1.1   Wed Jan 15 12:01:28 GMT 2003
+    - Tweaks to the algorithm
+    - More tests
+    - Debug and noprune modes
+
 0.01  Fri Jan 10 10:18:47 2003
 	- original version; created by h2xs 1.22 with options
 		-b 5.5.3 -AX -n Mail::Thread

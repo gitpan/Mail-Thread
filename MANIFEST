@@ -4,4 +4,8 @@ MANIFEST
 README
 Thread.pm
 t/1.t
+t/2.t
+t/3.t
 t/testbox
+t/testbox-2
+t/testbox-3

@@ -9,7 +9,9 @@ my $mgr = new Mail::Box::Manager;
 my $box = $mgr->open(folder => "t/testbox");
 
 my $threader = new Mail::Thread($box->messages);
+$Mail::Thread::debug=0;
 
+$Mail::Thread::noprune=1;
 $threader->thread;
 
 is($threader->rootset, 3, "We have three main threads");
@@ -21,6 +23,9 @@ for ($threader->rootset) {
 
 sub dump_em {
     my ($self, $level) = @_;
+    if ($self->next and ref($self->next) !~ /Container/) {
+        use Data::Dumper; die Dumper $self;
+    }
     push @stuff, 
     [ $level, eval { "".$self->message->head->get("Subject") }
              || "[ Message not available ]" ];
@@ -30,16 +35,58 @@ sub dump_em {
 
 is_deeply(\@stuff,
  [
-          [ 0, '[rt-users] Configuration Problem' ],
-          [ 1, 'Re: [rt-users] Configuration Problem' ],
-          [ 0, 'Re: January\'s meeting' ],
-          [ 1, 'Re: January\'s meeting' ],
-          [ 2, 'Re: January\'s meeting' ],
-          [ 0, '[ Message not available ]' ],
-          [ 1, '[p5ml] Re: karie kahimi binge...help needed' ],
-          [ 1, 'Re: [p5ml] karie kahimi binge...help needed' ],
-          [ 1, 'R: [p5ml] karie kahimi binge...help needed' ],
-          [ 2, 'Re: [p5ml] karie kahimi binge...help needed' ],
-          [ 2, 'RE: [p5ml] Re: karie kahimi binge...help needed' ]
-        ], "It all works");
+          [
+            0,
+            '[rt-users] Configuration Problem'
+          ],
+          [
+            1,
+            'Re: [rt-users] Configuration Problem'
+          ],
+          [
+            0,
+            '[ Message not available ]'
+          ],
+          [
+            1,
+            '[ Message not available ]'
+          ],
+          [
+            2,
+            'Re: January\'s meeting'
+          ],
+          [
+            3,
+            'Re: January\'s meeting'
+          ],
+          [
+            4,
+            'Re: January\'s meeting'
+          ],
+          [
+            0,
+            '[ Message not available ]'
+          ],
+          [
+            1,
+            '[p5ml] Re: karie kahimi binge...help needed'
+          ],
+          [
+            1,
+            'Re: [p5ml] karie kahimi binge...help needed'
+          ],
+          [
+            1,
+            'R: [p5ml] karie kahimi binge...help needed'
+          ],
+          [
+            2,
+            'Re: [p5ml] karie kahimi binge...help needed'
+          ],
+          [
+            2,
+            'RE: [p5ml] Re: karie kahimi binge...help needed'
+          ]
+        ]
+ , "It all works");
 
