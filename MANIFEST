@@ -7,7 +7,13 @@ t/1.t
 t/2.t
 t/3.t
 t/4.t
+t/5.t
+t/6.t
+t/7.t
 t/testbox
 t/testbox-2
 t/testbox-3
 t/testbox-4
+t/testbox-5
+t/testbox-6
+t/testbox-7

@@ -5,7 +5,7 @@ use strict;
 use vars qw($VERSION);
 sub debug (@) { print @_ if $Mail::Thread::debug }
 
-$VERSION = '2.0';
+$VERSION = '2.1';
 
 sub new {
     my $self = shift;
@@ -29,6 +29,7 @@ sub _uniq {
 sub _references {
     my $class = shift;
     my $msg = shift;
+    no warnings 'uninitialized';
     my @references = ($class->_get_hdr($msg, "References") =~ /<([^>]+)>/g);
     my $foo = $class->_get_hdr($msg,"In-Reply-To");
     $foo =~ s/.*?<([^>]+)>.*/$1/;
@@ -63,8 +64,10 @@ sub thread {
     $self->_setup();
     $self->{rootset} = [ grep { !$_->parent } values %{$self->{id_table}} ];
     delete $self->{id_table};
-    $self->{rootset} = [ map {_prune_empties($_, 0)} @{$self->{rootset}} ]
+    delete $self->{seen};
+    $self->{rootset} = [ map {$self->_prune_empties($_, 0)} @{$self->{rootset}} ]
         unless $Mail::Thread::noprune;
+    delete $self->{seen};
     #$self->_group_set_bysubject();
     $self->_finish();
 }
@@ -106,41 +109,57 @@ sub _setup {
             my $container = $self->_get_cont_for_id($ref);
             debug "   Looking at reference $ref\n";
 
-            if ($prev ne undef) {
+            if (defined $prev and $prev) {
                 next if $container == $this_container;
                 next if $container->has_descendent($prev);
                 $prev->add_child($container);
             }
             $prev = $container;
         }
-        if ($prev ne undef) { $prev->add_child($this_container) }
+        if (defined $prev) { $prev->add_child($this_container) }
         debug "Done with this message!\n----\n";
         if ($Mail::Thread::debug) {
             _dump( values %{$self->{id_table}} );
         }
     }
+
+    debug "The final table:\n";
+    if ($Mail::Thread::debug) {
+        _dump( values %{$self->{id_table}} );
+    }
 }
 
 
 sub _prune_empties {
+    my $self = shift;
     my $cont = shift;
     my $level = shift;
-    if ($level > 20) { $Mail::Thread::debug++ || print "Something is probably wrong"; }
-    if ($level > 30) { die "Deep recursion in empty pruner"; }
+    do { debug "Stuffed!"; return () } if $self->{seen}{$cont}++;
     debug " "x$level;
     debug "Looking at ".$cont->messageid."\n";
 
     my @new_children;
     for my $ctr ($cont->children) {
-        my @L = _prune_empties($ctr, $level+1);
+        debug " "x$level;
+        debug "Recursing on child ".$ctr->messageid."\n";
+        my @L = $self->_prune_empties($ctr, $level+1);
         push @new_children, @L;
+        debug " "x$level;
+        debug "Removing child ".$ctr->messageid."\n";
         $ctr->remove_child($ctr);
     }
 
+    debug " "x$level;
+    debug "Adding children @new_children\n";
     $cont->add_child($_) for @new_children;
-    return () if !$cont->message and !$cont->children;
+    if (!$cont->message and !$cont->children) {
+        debug " "x$level;
+        debug "No message and no children - killing\n";
+        return ();
+    }
     my @children = $cont->children;
     if (!$cont->message and @children == 1 and $cont->parent) {
+        debug "Promoting the child of ".$cont->messageid."\n";
         $cont->remove_child($_) for @children;
         return @children;
     }
