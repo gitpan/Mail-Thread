@@ -47,6 +47,7 @@ sub dump_into {
                          sort { eval { $a->topmost->message->order } <=>
                                 eval { $b->topmost->message->order } } @_;
                      });
+
     $_->iterate_down(
         sub {
             my ($self, $level) = @_;

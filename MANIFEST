@@ -2,7 +2,7 @@ Changes
 Makefile.PL
 MANIFEST
 README
-lib/Mail/Thread.pm
+Thread.pm
 t/common.pl
 t/1.t
 t/2.t

@@ -5,7 +5,7 @@ use strict;
 use vars qw($VERSION $debug $noprune $nosubject);
 sub debug (@) { print @_ if $debug }
 
-$VERSION = '2.2';
+$VERSION = '2.3';
 
 sub new {
     my $self = shift;
@@ -299,8 +299,9 @@ sub order {
     $root->order_children( $ordersub );
 
     # and untangle it
-    @{$self->{rootset}} = $root->children;
-    $root->remove_child($_) for $root->children;
+    my @kids = $root->children;
+    $self->{rootset} = \@kids;
+    $root->remove_child($_) for @kids;
 }
 
 package Mail::Thread::Container;
@@ -319,10 +320,10 @@ sub topmost {
     my $self = shift;
 
     return $self if $self->message;
-    my $sib = eval { $self->next->topmost };
-    return $sib if $sib;
     my $kid = eval { $self->child->topmost };
     return $kid if $kid;
+    my $sib = eval { $self->next->topmost };
+    return $sib if $sib;
     return;
 }
 
@@ -459,7 +460,7 @@ sub iterate_down {
         # spot/break loops
         $seen{$walk}++;
         if ($walk->child && $seen{$walk->child}) { $walk->child(undef) }
-        if ($walk->next  && $seen{$walk->next})  { $walk->next(undef) }
+        if ($walk->next  && $seen{$walk->next})  { $walk->next(undef)  }
 
         my $next;
         # go down, or across
@@ -534,7 +535,7 @@ of any other message.
 
 =head2 order($ordering_sub)
 
-calls C<order_children> over each memeber of the root set, from one level higher
+calls C<order_children> over each member of the root set, from one level higher
 
 =head1 C<Mail::Thread::Container> methods
 
@@ -616,7 +617,7 @@ $ordering_sub may be omitted, in which case no ordering takes place
 
 =head2 topmost
 
-Walks the tree to return the topmost container with a message attached
+Walks the tree depth-first and returns the first message container found with a message attached
 
 =head2 recurse_down($callback)
 

@@ -2,8 +2,8 @@ use 5.00503;
 use ExtUtils::MakeMaker;
 WriteMakefile(
     'NAME'		=> 'Mail::Thread',
-    'VERSION_FROM'	=> 'lib/Mail/Thread.pm',
-    'PREREQ_PM'		=> {},
-    ABSTRACT_FROM => 'lib/Mail/Thread.pm',
+    'VERSION_FROM'	=> 'Thread.pm',
+    'PREREQ_PM'		=> { Test::More => 0 },
+    ABSTRACT_FROM => 'Thread.pm',
     AUTHOR     => 'Simon Cozens <simon@internal.cyberhqz.com>',
 );
