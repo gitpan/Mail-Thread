@@ -5,10 +5,13 @@ use Test::More tests => 3;
 use_ok("Mail::Thread");
 
 my $threader = new Mail::Thread( slurp_messages('t/testbox') );
-$Mail::Thread::debug=0;
-$Mail::Thread::noprune=1;
-$Mail::Thread::nosubject=1;
-$threader->thread;
+{
+	no warnings 'once';
+	$Mail::Thread::debug=0;
+	$Mail::Thread::noprune=1;
+	$Mail::Thread::nosubject=1;
+	$threader->thread;
+}
 
 is($threader->rootset, 3, "We have three main threads");
 

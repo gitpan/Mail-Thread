@@ -4,6 +4,7 @@ BEGIN { require 't/common.pl' }
 use Test::More tests => 3;
 use_ok("Mail::Thread");
 my $threader = new Mail::Thread(slurp_messages('t/testbox-4'));
+no warnings 'once';
 $Mail::Thread::nosubject=1;
 $threader->thread;
 

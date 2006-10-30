@@ -6,7 +6,7 @@ use vars qw($VERSION $debug $noprune $nosubject);
 sub debug (@) { print @_ if $debug }
 use Email::Abstract;
 
-$VERSION = '2.5';
+$VERSION = '2.55';
 
 sub new {
     my $self = shift;
@@ -141,8 +141,7 @@ sub thread {
     my $self = shift;
     $self->_setup();
     $self->{rootset} = [ grep { !$_->parent } values %{$self->{id_table}} ];
-    delete $self->{id_table};
-    delete $self->{seen};
+
     unless ($noprune) {
         my $fakeroot = $self->_container_class->new( 'fakeroot' );
         $fakeroot->set_children( $self->rootset );
@@ -150,12 +149,17 @@ sub thread {
         my @kids = @{$self->{rootset}} = $fakeroot->children;
         $fakeroot->remove_child($_) for $fakeroot->children;
     }
-    delete $self->{seen};
+
     $self->_group_set_bysubject() unless $nosubject;
     $self->_finish();
 }
 
-sub _finish { }
+sub _finish {
+    my $self = shift;
+    delete $self->{id_table};
+    delete $self->{seen};
+    delete $self->{seen};
+}
 
 sub _get_cont_for_id {
     my $self = shift;
@@ -179,59 +183,7 @@ sub _setup {
 
     # 1.  For each message
     for my $message (@{$self->{messages}}) {
-        debug "\n\nLooking at ".$self->_msgid($message)."\n";
-        # A. if id_table...
-        my $this_container = $self->_get_cont_for_id($self->_msgid($message));
-        $this_container->message($message);
-        debug "  [".$this_container->subject."]\n----\n";
-
-        # B. For each element in the message's References field:
-        my @refs = $self->_references($message);
-        debug " Now looking at its references: @refs\n";
-
-        my $prev;
-        for my $ref (@refs) {
-            debug "   Looking at reference $ref\n";
-            # Find a Container object for the given Message-ID
-            my $container = $self->_get_cont_for_id($ref);
-
-            # Link the References field's Containers together in the
-            # order implied by the References header
-            # * If they are already linked don't change the existing links
-            # * Do not add a link if adding that link would introduce
-            #   a loop...
-
-            if ($prev &&
-                !$container->parent &&  # already linked
-                !$container->has_descendent($prev) # would loop
-               ) {
-                $prev->add_child($container);
-            }
-            $prev = $container;
-        }
-
-        # C. Set the parent of this message to be the last element in
-        # References...
-        if ($prev &&
-            !$this_container->has_descendent($prev) # would loop
-           ) {
-            $prev->add_child($this_container)
-        }
-
-        debug "Done with this message!\n----\n";
-        if ($debug) {
-            _dump( values %{$self->{id_table}} );
-        }
-
-        if (0) {
-            # Note that at all times the various 'parent' and 'child'
-            # fields must be kept inter-consistent
-            for my $c (values %{ $self->{id_table} }) {
-                if ($c->parent && !grep { $c == $_ } $c->parent->children) {
-                    die "$c dysfunctional!\n";
-                }
-            }
-        }
+      $self->_add_message($message);
     }
 
     debug "\nThe final table:\n";
@@ -240,6 +192,63 @@ sub _setup {
     }
 }
 
+sub _add_message {
+    my ($self, $message) = @_;
+
+    debug "\n\nLooking at ".$self->_msgid($message)."\n";
+    # A. if id_table...
+    my $this_container = $self->_get_cont_for_id($self->_msgid($message));
+    $this_container->message($message);
+    debug "  [".$this_container->subject."]\n----\n";
+
+    # B. For each element in the message's References field:
+    my @refs = $self->_references($message);
+    debug " Now looking at its references: @refs\n";
+
+    my $prev;
+    for my $ref (@refs) {
+        debug "   Looking at reference $ref\n";
+        # Find a Container object for the given Message-ID
+        my $container = $self->_get_cont_for_id($ref);
+
+        # Link the References field's Containers together in the
+        # order implied by the References header
+        # * If they are already linked don't change the existing links
+        # * Do not add a link if adding that link would introduce
+        #   a loop...
+
+        if ($prev &&
+            !$container->parent &&  # already linked
+            !$container->has_descendent($prev) # would loop
+           ) {
+            $prev->add_child($container);
+        }
+        $prev = $container;
+    }
+
+    # C. Set the parent of this message to be the last element in
+    # References...
+    if ($prev &&
+        !$this_container->has_descendent($prev) # would loop
+       ) {
+        $prev->add_child($this_container)
+    }
+
+    debug "Done with this message!\n----\n";
+    if ($debug) {
+        _dump( values %{$self->{id_table}} );
+    }
+
+    if (0) {
+        # Note that at all times the various 'parent' and 'child'
+        # fields must be kept inter-consistent
+        for my $c (values %{ $self->{id_table} }) {
+            if ($c->parent && !grep { $c == $_ } $c->parent->children) {
+                die "$c dysfunctional!\n";
+            }
+        }
+    }
+}
 
 sub _prune_empties {
     my $self = shift;
@@ -631,7 +640,20 @@ Walks the tree depth-first and returns the first message container found with a 
 
 Calls the given callback on this node and B<all> of its children.
 
-=head1 AUTHOR
+=head1 DEBUGGING
+
+You can set $Mail::Thread::debug=1 to watch what's going on.
+
+=head1 MAINTAINER
+
+Tony Bowden
+
+=head1 BUGS and QUERIES
+
+Please direct all correspondence regarding this module to:
+  bug-Mail-Thread@rt.cpan.org
+
+=head1 ORIGINAL AUTHOR
 
 Simon Cozens, E<lt>simon@cpan.orgE<gt>
 
